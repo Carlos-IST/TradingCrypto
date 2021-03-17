@@ -1,0 +1,185 @@
+'''
+Author: Carlos Santillán
+Date: 26-Feb-2021
+
+Desc.: First try of connection to Binance API
+
+Status:
+26-Feb-2021: Doesn[t work, keeps saying command executed 1000ms seconds ahead of Binance's Server
+13-Mar-2021: It finally runs after adding module for running as administrator and for modifying time
+16-Mar-2021: Added modules for websocket and for creating dataframe with historical data
+             Cannot store API keys as environment variables
+'''
+
+# Retreive account balance
+
+##################
+## IMPORT BLOCK ##
+##################
+
+import os
+from binance.client import Client
+import time
+import win32api
+import ctypes, sys
+import pandas as pd
+import numpy as np
+import btalib
+
+## END IMPORT BLOCK ===========================================================================================
+
+###############
+## FUNCTIONS ##
+###############
+
+### Function that allows running as admin
+def is_admin():
+    '''
+    DESC.: Allows running code as admin
+    INPUT: None
+    :return: Prompts to run Python code as admin
+    '''
+    try:
+        return ctypes.windll.shell32.IsUserAnAdmin()
+    except:
+        return False
+### End of Function______________________________________________________________________________
+
+### Function that tells the socket manager what to do when it receives new data (BTC)
+def btc_trade_history(msg):
+    ''' define how to process incoming WebSocket messages '''
+    btc_current_price = client.get_symbol_ticker(symbol="BTCUSDT")
+    if msg['e'] != 'error':
+        print(msg['c'])
+        btc_current_price['last'] = msg['c']
+        btc_current_price['bid'] = msg['b']
+        btc_current_price['last'] = msg['a']
+    else:
+        btc_current_price['error'] = True
+### End of function __________________________________________________________________________
+
+### Function that tells the socket manager what to do when it receives new data (BTC)
+def eth_trade_history(msg):
+    ''' define how to process incoming WebSocket messages '''
+    eth_current_price = client.get_symbol_ticker(symbol="ETHUSDT")
+    if msg['e'] != 'error':
+        print(msg['c'])
+        eth_current_price['last'] = msg['c']
+        eth_current_price['bid'] = msg['b']
+        eth_current_price['last'] = msg['a']
+    else:
+        eth_current_price['error'] = True
+### End of function __________________________________________________________________________
+
+
+## END OF FUNCTIONS BLOCK ===================================================================================
+
+##########
+## CODE ##
+##########
+
+## Store API keys as local variables
+#api_binance_key_first = os.environ.get('api_binance_key_first')
+#api_binance_secret_first = os.environ.get('api_binance_secret_first')
+api_key_first = 'my_key'
+api_secret_first = 'my_secret'
+
+## Initialize client and pass API credential
+client = Client(api_key_first, api_secret_first)
+
+if is_admin():
+    gt = client.get_server_time()
+    tt = time.gmtime(int((gt["serverTime"]) / 1000))
+    win32api.SetSystemTime(tt[0], tt[1], 0, tt[2], tt[3], tt[4], tt[5], 0)
+else:
+    # Re-run the program with admin rights
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, __file__, None, 1)
+
+### Data of the account
+#print(client.get_account())
+
+## Get balance for ETH, BTC, DOGE, USDT and MITH
+print(client.get_asset_balance(asset='ETH'))#, recvWindow=20000))
+print(client.get_asset_balance(asset='BTC'))
+print(client.get_asset_balance(asset='DOGE'))
+print(client.get_asset_balance(asset='USDT'))
+print(client.get_asset_balance(asset='MITH'))
+
+### Get latest price of BTC and ETH in Binance API
+#btc_current_price = client.get_symbol_ticker(symbol="BTCUSDT")
+#eth_current_price = client.get_symbol_ticker(symbol="ETHUSDT")
+#print(btc_current_price)
+#print(eth_current_price)
+
+### Access just the price
+#print(eth_current_price['price'])
+
+'''
+## BINANCE WEBSOCKET
+### The Binance WebSocket requires us to only send a command once to open up a stream,
+### and then data will automatically stream over as prices get updated.
+from binance.websockets import BinanceSocketManager
+from twisted.internet import reactor
+
+bsm = BinanceSocketManager(client)
+conn_key = bsm.start_symbol_ticker_socket('BTCUSDT', btc_trade_history)
+bsm.start()
+
+## stop websocket
+#bsm.stop_socket(conn_key)
+
+## properly terminate WebSocket
+#reactor.stop()
+'''
+
+## To get a full view of what is available, type the following in your Python terminal
+# help(BinanceSocketManager)
+
+## BTC Historical price data in .csv format
+### valid intervals - 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M
+### get timestamp of earliest date data is available
+timestamp = client._get_earliest_valid_timestamp('BTCUSDT', '1d')
+print(timestamp)
+
+### request historical candle (or klines) data
+bars = client.get_historical_klines('BTCUSDT', '1d', timestamp, limit=1000)
+
+### option 4 - create a Pandas DataFrame and export to CSV
+btc_df = pd.DataFrame(bars)
+btc_df.drop(btc_df.iloc[:, 6:], axis=1, inplace=True)                  ### remove unnecessary cols
+btc_df.columns = ["DATE","OPEN", "HIGH", "LOW", "CLOSE", "VOLUME"]     ### rename cols
+btc_df.set_index('DATE', inplace=True)                                 ### Set DATE as index
+print(btc_df.head())
+
+### export DataFrame to csv
+btc_df.to_csv('C:/Users/PC/Desktop/Crypto Trading/DATA/BTC/btc_bars3.csv')
+
+
+'''
+## Technical Indicators
+btc_df_2.index = pd.to_datetime(btc_df_2.index, unit='ms')
+
+### calculate 20 moving average using Pandas
+btc_df_2['20sma'] = btc_df_2.close.rolling(20).mean()
+print(btc_df_2.tail(5))
+'''
+
+## stop websocket
+#bsm.stop_socket(conn_key)
+
+## properly terminate WebSocket
+#reactor.stop()
+
+
+## END OF CODE BLOCK =======================================================================================
+
+'''
+for i in range(1, 10):
+    local_time1 = int(time.time() * 1000)
+    server_time = client.get_server_time()
+    diff1 = server_time['serverTime'] - local_time1
+    local_time2 = int(time.time() * 1000)
+    diff2 = local_time2 - server_time['serverTime']
+    print("local1: %s server:%s local2: %s diff1:%s diff2:%s" % (local_time1, server_time['serverTime'], local_time2, diff1, diff2))
+    time.sleep(2)
+'''
